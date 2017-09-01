@@ -1,0 +1,174 @@
+一.四种日志系统
+JCL http://zy19982004.iteye.com/blog/1991328
+Apache Log4j http://zy19982004.iteye.com/blog/1992939
+Slf4j http://zy19982004.iteye.com/blog/1993059
+JDK Logger http://zy19982004.iteye.com/blog/1993209
+二.为什么会有桥接
+     除了JDK Logger是一个纯粹的日志实现之外，其它三个日志系统都是api+impl的形式。每个人都想去做门面，让别的厂商做实现。结果呢，做是做到了。但相比JDBC由sun提供的一套接口，日志系统显得极为混乱。有多少人知道自己的Logger LOG = XX.getLogger(class)到底是哪个Logger？有多少系统里混合着几种日志系统？本文将一一为你解答。
+Java代码  收藏代码
+<!--JCL-->  
+<dependency>     
+    <groupId>commons-logging</groupId>      
+    <artifactId>commons-logging-api</artifactId>      
+    <version>1.1</version>      
+</dependency>   
+<dependency>    
+    <groupId>commons-logging</groupId>     
+    <artifactId>commons-logging</artifactId>     
+    <version>1.1.1</version>     
+</dependency>  
+  
+<!--Log4j-->  
+<dependency>  
+    <groupId>org.apache.logging.log4j</groupId>  
+    <artifactId>log4j-api</artifactId>  
+    <version>2.0-beta9</version>  
+</dependency>  
+<dependency>  
+    <groupId>log4j</groupId>  
+    <artifactId>log4j</artifactId>  
+    <version>1.2.17</version>  
+</dependency>  
+  
+<!--Slf4j-->  
+<dependency>   
+    <groupId>org.slf4j</groupId>   
+    <artifactId>slf4j-api</artifactId>   
+    <version>1.7.5</version>   
+</dependency>   
+<dependency>   
+    <groupId>org.slf4j</groupId>   
+    <artifactId>slf4j-simple</artifactId>   
+    <version>1.7.5</version>   
+</dependency>  
+ 
+三.使用JDK Logger
+      这个比较简单，pom里什么都不用做，代码里Logger logger = Logger.getLogger(JavaLoggerTest.class.getName())即可。
+ 
+四.使用JCL做门面，其它日志系统做实现(含JCL自身实现)
+     http://zy19982004.iteye.com/blog/1991328已经将了JCL寻找日志实现的方式。
+JCL做门面，JCL做实现：pom里只需
+Java代码  收藏代码
+<dependency>    
+    <groupId>commons-logging</groupId>     
+    <artifactId>commons-logging</artifactId>     
+    <version>1.1.1</version>     
+</dependency>  
+ 
+JCL做门面，Log4j做实现，也好说，因为JCL和Log4j都是Apache自家的东西，所以JCL api里已经预留了Log4j的实现，我们只需要把Log4j加到系统里即可，pom如下。为什么是commons-logging不是commons-logging-api也请参考http://zy19982004.iteye.com/blog/1991328
+Java代码  收藏代码
+<dependency>    
+    <groupId>commons-logging</groupId>     
+    <artifactId>commons-logging</artifactId>     
+    <version>1.1.1</version>     
+</dependency>  
+<dependency>  
+    <groupId>log4j</groupId>  
+    <artifactId>log4j</artifactId>  
+    <version>1.2.17</version>  
+</dependency>  
+ 
+JCL做门面，Slf4j做实现。可惜的是，JCL并没有内置Slf4j的实现，只能通过service机制，Slf4j里定义一个org.apache.commons.logging.LogFactory的实现类。jcl-over-slf4j就是桥接器，SLF4JLog实现JCL的Log接口，由Slf4j的Logger去实现；SLF4JLogFactory实现JCL的LogFactory，由Slf4j的LoggerFactory去实现。所以jcl-over-slf4j依赖slf4j-api。剩下的就是Slf4j决定采用哪种实现了，比喻slf4j-simple。最后pom文件如下。
+Java代码  收藏代码
+<dependency>     
+    <groupId>commons-logging</groupId>      
+    <artifactId>commons-logging-api</artifactId>      
+    <version>1.1</version>      
+</dependency>  
+<dependency>    
+    <groupId>org.slf4j</groupId>    
+    <artifactId>jcl-over-slf4j</artifactId>    
+    <version>1.7.5</version>    
+</dependency>  
+  
+//可定制  
+<dependency>   
+    <groupId>org.slf4j</groupId>   
+    <artifactId>slf4j-simple</artifactId>   
+    <version>1.7.5</version>   
+</dependency>   
+   
+JCL做门面，JDK Logger做实现。只需加入commons-logging-api即可。pom如下
+Java代码  收藏代码
+<dependency>     
+    <groupId>commons-logging</groupId>      
+    <artifactId>commons-logging-api</artifactId>      
+    <version>1.1</version>      
+</dependency>   
+ 
+ 
+五.使用Slf4j做门面，其它日志系统做实现(含Slf4j自身实现)
+Slf4j做门面，自身做实现。只需加入slf-api和slf-simple即可。pom如下
+Java代码  收藏代码
+<dependency>   
+    <groupId>org.slf4j</groupId>   
+    <artifactId>slf4j-api</artifactId>   
+    <version>1.7.5</version>   
+</dependency>   
+<dependency>   
+    <groupId>org.slf4j</groupId>   
+    <artifactId>slf4j-simple</artifactId>   
+    <version>1.7.5</version>   
+</dependency>  
+ 
+Slf4j做门面，JCL做实现。需要slf4j-jcl做桥接器，slf4j-jcl已经依赖commons-logging了，所以我们不需要了。需要注意的是jcl-over-slf4j和slf4j-jcl不能同时出现在系统里，slf4j会检查这种循环调用最后抛出Detected both jcl-over-slf4j.jar AND slf4j-jcl.jar on the class path。这几种日志系统的桥接器在一起还有有其它的循环，使用时注意就行了。最后pom如下
+Java代码  收藏代码
+<dependency>   
+    <groupId>org.slf4j</groupId>   
+    <artifactId>slf4j-api</artifactId>   
+    <version>1.7.5</version>   
+</dependency>   
+<dependency>    
+    <groupId>org.slf4j</groupId>    
+    <artifactId>slf4j-jcl</artifactId>    
+    <version>1.7.5</version>    
+</dependency>    
+ 
+Slf4j做门面，Log4j做实现。和上面一个道理。需要桥接器slf4j-log4j12。http://zy19982004.iteye.com/blog/1993059 里已经将到了slf4j-log4j12是怎么工作的，因为slf4j-log4j12 pom里已经依赖log4j，所以我们不需要了。最后pom如下
+Java代码  收藏代码
+<dependency>   
+    <groupId>org.slf4j</groupId>   
+    <artifactId>slf4j-api</artifactId>   
+    <version>1.7.5</version>   
+</dependency>   
+  
+<dependency>    
+    <groupId>org.slf4j</groupId>    
+    <artifactId>slf4j-log4j12</artifactId>    
+    <version>1.7.5</version>    
+</dependency>   
+ 
+Slf4j做门面，JDK Logger做实现。好像没有发现这个桥接器，写起来也简单，参考http://zy19982004.iteye.com/blog/1993059定义自己的日志实现。
+六.使用Log4j做门面，其它日志系统做实现(含Log4j自身实现)
+ 
+      相比JCL做门面，动态查找实现和Slf4j做门面，静态绑定实现，Log4j的门面，其它日志做实现，相关桥接器的代码我没细过，大概扫了一眼，只是纯粹意义上的接口和实现的关系。包装一下别人的东西，没撒意思。
+ Log4j做门面，Log4j做实现。只需要log4j，pom如下
+Java代码  收藏代码
+<dependency>  
+    <groupId>log4j</groupId>  
+    <artifactId>log4j</artifactId>  
+    <version>1.2.17</version>  
+</dependency>  
+ 
+Log4j做门面，JCL做实现。使用log4j-jcl做桥接器。log4j-jcl已经依赖log4j-api和commons-logging，所以我们不需要了，pom如下
+Java代码  收藏代码
+<dependency>  
+   <groupId>org.apache.logging.log4j</groupId>  
+   <artifactId>log4j-jcl</artifactId>  
+   <version>2.0-beta9</version>  
+</dependency>  
+ 
+Log4j做门面，Slf4j做实现。log4j-to-slf4j已经依赖log4j-api和slf4j-api，我们不再需要了。pom如下
+Java代码  收藏代码
+<dependency>  
+    <groupId>org.apache.logging.log4j</groupId>  
+    <artifactId>log4j-to-slf4j</artifactId>  
+    <version>2.0-beta9</version>  
+ </dependency>  
+<dependency>   
+    <groupId>org.slf4j</groupId>   
+    <artifactId>slf4j-simple</artifactId>   
+    <version>1.7.5</version>   
+</dependency>  
+ 
+Log4j做门面，JDK Logger做实现。没有发现这个桥接器，也没必要。 
